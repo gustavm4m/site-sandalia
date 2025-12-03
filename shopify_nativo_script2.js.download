@@ -1,0 +1,764 @@
+(function () {
+    function addScript(src, id) {
+        if (typeof document !== "undefined" && !document.getElementById(id)) {
+            var scripts = document.getElementsByTagName("script");
+            for (var i = 0; i < scripts.length; i++) {
+                if (scripts[i].src === src) return;
+            }
+            var script = document.createElement("script");
+            script.async = true;
+            script.src = src;
+            script.id = id;
+            var firstScript = document.getElementsByTagName("script")[0];
+            firstScript.parentNode.insertBefore(script, firstScript);
+        }
+    }
+
+    function setupFacebookPixel() {
+        if (typeof window !== "undefined") {
+            window.fbq = function () {
+                var args = [];
+                for (var i = 0; i < arguments.length; i++) args[i] = arguments[i];
+                if ("Purchase" !== args[1] ||
+                    (args[2].order_id && args[2].currency && (args[2].value || args[2].value === 0))) {
+                    if (window.fbq.callMethod) {
+                        window.fbq.callMethod.apply(window.fbq, args);
+                    } else {
+                        window.fbq.queue.push(args);
+                    }
+                }
+            };
+            window._fbq = window.fbq;
+            window.fbq.push = window.fbq;
+            window.fbq.loaded = true;
+            window.fbq.version = "2.0";
+            window.fbq.queue = [];
+            addScript("https://connect.facebook.net/en_US/fbevents.js", "sol-facebook");
+        }
+    }
+
+    setupFacebookPixel()
+
+
+
+    // FunÃƒÂ§ÃƒÂ£o para obter o valor de um cookie
+    async function getCookie(name) {
+        let cookieValue = null;
+        if (window.shopify && window.shopify.browser) {
+            cookieValue = await window.shopify.browser.cookie.get(name);
+        } else {
+            const nameEQ = name + "=";
+            const ca = document.cookie.split(';');
+            for (let i = 0; i < ca.length; i++) {
+                let c = ca[i];
+                while (c.charAt(0) === ' ') c = c.substring(1);
+                if (c.indexOf(nameEQ) === 0) {
+                    cookieValue = c.substring(nameEQ.length, c.length);
+                    break;
+                }
+            }
+        }
+
+        if (name === '_fbc' && cookieValue) {
+            const parts = cookieValue.split('.');
+            if (parts.length >= 3) {
+                const timestamp = parseInt(parts[2], 10);
+                if (!isNaN(timestamp)) {
+                    const creationDate = new Date(timestamp * 1000);
+                    const now = new Date();
+                    const ageInDays = (now - creationDate) / (1000 * 60 * 60 * 24);
+
+                    if (ageInDays >= 89) {
+                        console.log('Cookie _fbc tem', ageInDays.toFixed(0), 'dias - ignorando');
+                        return null;
+                    }
+                }
+            }
+        }
+
+        return cookieValue;
+    }
+
+    // FunÃƒÂ§ÃƒÂ£o para definir um cookie
+    async function setCookie(name, value, seconds, domain) {
+        console.log('setCookie', name, value, seconds, domain);
+        var expires = "";
+        if (seconds) {
+            var date = new Date();
+            date.setTime(date.getTime() + seconds * 1000);
+            expires = "; expires=" + date.toUTCString();
+        }
+
+        var cookieValue = `${name}=${value}${expires}; path=/; SameSite=Lax; domain=${domain}`;
+        if (window.shopify && window.shopify.browser) {
+            await window.shopify.browser.cookie.set(cookieValue);
+        } else {
+            document.cookie = cookieValue;
+        }
+    }
+
+    function getDomainFromHostname(hostname) {
+        const doubleTlds = ['.co.uk', '.com.br', '.myshopify.com']; // Adicione mais TLDs duplos conforme necessÃƒÆ’Ã‚Â¡rio
+        let domainPartsCount = 2; // NÃƒÆ’Ã‚Âºmero padrÃƒÆ’Ã‚Â£o de partes para TLDs simples
+
+        // Verifica se o hostname termina com um dos TLDs duplos
+        doubleTlds.forEach(tld => {
+            if (hostname.endsWith(tld)) {
+                domainPartsCount = 3;
+            }
+        });
+
+        const parts = hostname.split('.');
+
+        // Se tiver menos ou igual ao nÃƒÆ’Ã‚Âºmero de partes do TLD, retorne o hostname completo com um ponto
+        if (parts.length <= domainPartsCount) {
+            return '.' + hostname;
+        } else {
+            // Retorna o domÃƒÆ’Ã‚Â­nio base ou subdomÃƒÆ’Ã‚Â­nio relevante com um ponto na frente
+            return '.' + parts.slice(1).join('.');
+        }
+    }
+
+    var localStorageKey = 'uniqueId';
+    var cookieKey = 'uniqueId';
+    var uniqueId;
+    async function retrieveUniqueId() {
+        var id = localStorage.getItem(localStorageKey) ||
+            await getCookie(cookieKey) ||
+            Math.random().toString(36).substr(2, 9) + "_" + new Date().getTime();
+        return id;
+    }
+
+    // Depois vocÃƒÂª pode chamar essa funÃƒÂ§ÃƒÂ£o em algum lugar que possa lidar com a operaÃƒÂ§ÃƒÂ£o assÃƒÂ­ncrona:
+    retrieveUniqueId().then(id => {
+        console.log("Unique ID:", id);
+        // VocÃƒÂª pode usar uniqueId aqui
+        uniqueId = id;
+    });
+
+    let ipv4, ipv6;
+    const ipPromise = fetchIpAddresses();
+
+    async function fetchIpAddresses() {
+        try {
+            ipv6 = await getIpv6();
+            if (!ipv6) {
+                ipv4 = await getIpv4();
+            }
+        } catch (error) {
+            console.log("Error fetching IP addresses", error);
+        }
+    }
+
+    async function getIpv4() {
+        try {
+            const response = await fetch("https://api64.ipify.org?format=json");
+            const data = await response.json();
+            return data.ip;
+        } catch (error) {
+            console.log("Error on getIpv4", error);
+            return null;
+        }
+    }
+
+    async function getIpv6() {
+        try {
+            const response = await fetch("https://api6.ipify.org?format=json");
+            const data = await response.json();
+            return data.ip;
+        } catch (error) {
+            console.log("Error on getIpv6", error);
+            return null;
+        }
+    }
+
+    // Function to remove accents and keep only letters
+    function normalizeString(str) {
+        return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z]/g, '').toLowerCase().trim();
+    }
+
+    // Function to keep only numbers
+    function normalizeNumber(str) {
+        return str.replace(/[^0-9]/g, '').trim();
+    }
+
+    // Function to hash data using SHA-256
+    async function sha256(message) {
+        const msgBuffer = new TextEncoder().encode(message);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        return hashHex;
+    }
+
+    // Example of hashing user parameters
+    async function hashUserData(user) {
+        const hashedData = {};
+
+        if (user.email) {
+            hashedData.em = await sha256(user.email.toLowerCase().trim());
+        }
+        if (user.phone) {
+            hashedData.ph = await sha256(normalizeNumber(user.phone));
+        }
+        if (user.firstName) {
+            hashedData.fn = await sha256(normalizeString(user.firstName));
+        }
+        if (user.lastName) {
+            hashedData.ln = await sha256(normalizeString(user.lastName));
+        }
+        if (user.city) {
+            hashedData.ct = await sha256(normalizeString(user.city));
+        }
+        if (user.state) {
+            hashedData.st = await sha256(normalizeString(user.state));
+        }
+        if (user.zip) {
+            hashedData.zp = await sha256(normalizeNumber(user.zip));
+        }
+        if (user.country) {
+            hashedData.country = await sha256(normalizeString(user.country));
+        }
+
+        return hashedData;
+    }
+
+    const pixelIdList = window.pixelIdList || [];
+    const company_id = window.company_id || '';
+    const is_test = window.is_test || false;
+    const fb_index = window.fb_index || '';
+    const fb_domain = window.fb_domain || '';
+
+    let fbp;
+    let fbc;
+
+    function generateFbp(index) {
+        return `fb.${index}.${new Date().getTime()}.${Math.floor(1e8 + 9e8 * Math.random())}`;
+    }
+
+    function generateFbc(fbclid, index) {
+        return `fb.${index}.${new Date().getTime()}.${fbclid}`;
+    }
+
+    async function setupFacebookCookies() {
+        fbp = await getCookie('_fbp');
+        if (!fbp) {
+            fbp = generateFbp(fb_index);
+            setCookie('_fbp', fbp, 730, fb_domain); // 2 years
+        }
+        fbc = await getCookie('_fbc');
+        const fbclid = new URLSearchParams(window.location.search).get('fbclid');
+        if (fbclid) {
+            fbc = generateFbc(fbclid, fb_index);
+            setCookie('_fbc', fbc, 89, fb_domain); // 2 years
+        }
+    }
+
+    setupFacebookCookies();
+
+    // Lista de possÃƒÂ­veis chaves de cookies que seu aplicativo pode usar
+    const cookieKeys = [
+        'solomon_email', 'solomon_phone', 'solomon_firstName', 'solomon_lastName', 'solomon_city', 'solomon_state', 'solomon_zip', 'solomon_country'
+    ];
+
+    async function loadSolomonUser() {
+        const cookieValues = {};
+
+        // Iterar sobre cada chave de cookie possÃƒÂ­vel e buscar seu valor com getCookie
+        for (const key of cookieKeys) {
+            const value = await getCookie(key);
+            if (value) {
+                const realKey = key.substring('solomon_'.length);
+                cookieValues[realKey] = decodeURIComponent(value);
+            }
+        }
+
+        // Se encontrou algo nos cookies, retorna isso
+        if (Object.keys(cookieValues).length > 0) {
+            return cookieValues;
+        }
+
+        // Caso contrÃƒÂ¡rio, carrega do localStorage
+        const storedUser = localStorage.getItem('SolomonUser');
+        if (storedUser) {
+            return JSON.parse(storedUser);
+        }
+
+        return {};
+    }
+    // Objeto para armazenar os dados do usuÃƒÆ’Ã‚Â¡rio
+    let SolomonUser;
+    loadSolomonUser().then(SolomonUserTemp => {
+        SolomonUser = SolomonUserTemp;
+    });
+
+    function updateSolomonUserFromCheckout(checkoutData) {
+        console.log('Updating SolomonUser from checkout data');
+
+        // Atualiza informaÃƒÂ§ÃƒÂµes bÃƒÂ¡sicas
+        SolomonUser.email = checkoutData.email ?? SolomonUser.email;
+        SolomonUser.firstName = checkoutData.shippingAddress.firstName ?? SolomonUser.firstName;
+        SolomonUser.lastName = checkoutData.shippingAddress.lastName ?? SolomonUser.lastName;
+        SolomonUser.city = checkoutData.shippingAddress.city ?? SolomonUser.city;
+        SolomonUser.country = checkoutData.shippingAddress.country ?? SolomonUser.country;
+        SolomonUser.state = checkoutData.shippingAddress.province ?? SolomonUser.state;
+        SolomonUser.zip = checkoutData.shippingAddress.zip ?? SolomonUser.zip;
+        SolomonUser.phone = checkoutData.phone || checkoutData.shippingAddress.phone || SolomonUser.phone;
+
+        saveSolomonUser();
+    }
+
+    async function saveSolomonUser() {
+        // Check if SolomonUser is defined
+        if (typeof SolomonUser !== 'undefined') {
+            try {
+                // Define the lifetime of the cookies (e.g., 30 days)
+                const cookieLifetimeSeconds = 2592000; // 30 days
+                // Define the domain for the cookies, if necessary
+                const cookieDomain = fb_domain;
+                console.log('SolomonUser Do Save', SolomonUser);
+                // Save each property of SolomonUser as a separate cookie
+                for (const key in SolomonUser) {
+                    console.log('key', key);
+                    if (SolomonUser.hasOwnProperty(key) && SolomonUser[key]) {
+                        const cookieName = 'solomon_' + key;
+                        const cookieValue = encodeURIComponent(SolomonUser[key]);
+                        await setCookie(cookieName, cookieValue, cookieLifetimeSeconds, cookieDomain);
+                    }
+                }
+
+                console.log('SolomonUser saved to cookies:', SolomonUser);
+            } catch (error) {
+                console.error('Error saving SolomonUser to cookies:', error);
+            }
+        } else {
+            console.error('SolomonUser data is undefined.');
+        }
+    }
+
+    function getEcommerceDataOnCheckout(checkoutData, eventContext) {
+        return {
+            item_count: checkoutData.lineItems.reduce((total, item) => total + item.quantity, 0),
+            items: checkoutData.lineItems.map((item) => ({
+                item_id: item.variant.product.id,
+                item_name: item.title,
+                item_variant: item.variant.title,
+                item_price: item.variant.price.amount,
+                item_quantity: item.quantity,
+                item_brand: item.variant.product.vendor,
+                item_category: item.variant.product.type
+            })),
+            total_price: checkoutData.totalPrice.amount,
+            currency: checkoutData.totalPrice.currencyCode,
+            url: eventContext.document.location.href,
+            referrer: eventContext.document.referrer
+        };
+    }
+
+    function generateEventId(eventName) {
+        const timestamp = Date.now(); // Current timestamp in milliseconds
+        const randomNumber = Math.floor(Math.random() * 1000000); // Random number between 0 and 999999
+        return `${eventName}_${timestamp}_${randomNumber}`;
+    }
+
+
+
+    const pageviewId = generateEventId('PageView');
+    var pageViewSent = false;
+    var hasInit = false;
+
+    function initiateEvents() {
+        if (hasInit) {
+            return Promise.resolve();
+        }
+
+        return loadSolomonUser().then(SolomonUser => {
+            return hashUserData(SolomonUser).then(hashedUser => {
+                console.log('hashedUser', hashedUser);
+                const init_setup = 'init';
+                pixelIdList.forEach(pixelId => {
+                    // Now you can use hashedUser to send to Facebook Pixel or CAPI
+                    console.log('uniqueId2', uniqueId);
+                    if (!hasInit) {
+                        window.fbq(init_setup, pixelId, {
+                            external_id: uniqueId,
+                            em: hashedUser.em,
+                            ph: hashedUser.ph,
+                            fn: hashedUser.fn,
+                            ln: hashedUser.ln,
+                            ct: hashedUser.ct,
+                            st: hashedUser.st,
+                            zp: hashedUser.zp,
+                            country: hashedUser.country
+                        });
+                    }
+                });
+                hasInit = true;
+            });
+        });
+
+    }
+
+    window.shopify.analytics.subscribe("page_viewed", (event) => {
+        if (pageViewSent) {
+            return;
+        }
+        pageViewSent = true;
+
+        initiateEvents().then(() => {
+            pixelIdList.forEach(pixelId => {
+                fbq('trackSingle', pixelId, 'PageView', {}, {
+                    eventID: pageviewId
+                });
+            });
+
+            // PageView Event
+            sendEventToServer('PageView', {
+                url: event.context.document.location.href,
+                referrer: event.context.document.referrer
+            });
+        });
+    });
+
+
+    window.shopify.analytics.subscribe("product_viewed", (event) => {
+
+        initiateEvents().then(() => {
+            var ecommerce = {
+                'items': [{
+                    'item_id': event.data.productVariant.product.id,
+                    'item_variant': event.data.productVariant.untranslatedTitle,
+                    'item_name': event.data.productVariant.product.untranslatedTitle,
+                    'price': event.data.productVariant.price.amount,
+                    'item_brand': event.data.productVariant.product.vendor,
+                    'item_category': event.data.productVariant.product.type,
+                    'item_quantity': '1',
+                    'currency': event.data.productVariant.price.currencyCode
+                }],
+                'url': event.context.document.location.href,
+                'referrer': event.context.document.referrer
+            };
+            console.log('ecommerce', ecommerce);
+            sendEventToServer('ViewContent', ecommerce);
+        });
+    });
+
+    //subscribe to events
+    window.shopify.analytics.subscribe("product_added_to_cart", (event) => {
+
+        initiateEvents().then(() => {
+            console.log('eventData', event.data);
+            var ecommerce = {
+                'items': [{
+                    'item_id': event.data.cartLine.merchandise.product.id,
+                    'item_variant': event.data.cartLine.merchandise.untranslatedTitle,
+                    'item_name': event.data.cartLine.merchandise.product.untranslatedTitle,
+                    'price': event.data.cartLine.merchandise.price.amount,
+                    'item_brand': event.data.cartLine.merchandise.product.vendor,
+                    'item_category': event.data.cartLine.merchandise.product.type,
+                    'item_quantity': event.data.cartLine.quantity,
+                    'currency': event.data.cartLine.merchandise.price.currencyCode
+                }],
+                'url': event.context.document.location.href,
+                'referrer': event.context.document.referrer
+
+            };
+            console.log('ecommerce', ecommerce);
+            sendEventToServer('AddToCart', ecommerce);
+        });
+    });
+
+    window.shopify.analytics.subscribe("checkout_started", (event) => {
+
+        initiateEvents().then(() => {
+            console.log('event.data', event.data);
+            var ecommerce = getEcommerceDataOnCheckout(event.data.checkout, event.context);
+            sendEventToServer('InitiateCheckout', ecommerce);
+            sendInternalEvent('InitiateCheckout');
+        });
+    });
+
+    window.shopify.analytics.subscribe("checkout_contact_info_submitted", (event) => {
+        console.log('event.data', event.data);
+        updateSolomonUserFromCheckout(event.data.checkout);
+    });
+
+    window.shopify.analytics.subscribe("checkout_address_info_submitted", (event) => {
+        console.log('event.data', event.data);
+        updateSolomonUserFromCheckout(event.data.checkout);
+    });
+
+    window.shopify.analytics.subscribe("checkout_shipping_info_submitted", (event) => {
+        console.log('event.data', event.data);
+        updateSolomonUserFromCheckout(event.data.checkout);
+    });
+
+    window.shopify.analytics.subscribe("payment_info_submitted", (event) => {
+
+        initiateEvents().then(() => {
+            console.log('event.data', event.data);
+            updateSolomonUserFromCheckout(event.data.checkout);
+            var ecommerce = getEcommerceDataOnCheckout(event.data.checkout, event.context);
+            sendEventToServer('AddPaymentInfo', ecommerce);
+        });
+    });
+
+    window.shopify.analytics.subscribe("checkout_completed", (event) => {
+
+        initiateEvents().then(() => {
+            console.log('Checkout Completed Event Data:', event.data);
+            updateSolomonUserFromCheckout(event.data.checkout);
+            // Adicionalmente, processa o evento de compra aqui
+            var ecommerce = getEcommerceDataOnCheckout(event.data.checkout, event.context);
+            ecommerce.order_id = event.data.checkout.order.id
+            sendEventToServer('Purchase', ecommerce);
+        });
+    });
+
+    function getEventTimestamp() {
+        return Math.floor(Date.now() / 1000);
+    }
+
+    function getUTMParameter(param, params) {
+        const values = params.getAll(param);
+        if (param === 'utm_campaign' || param === 'utm_content' || param === 'sol_campaign' || param === 'sol_content') {
+            for (let value of values) {
+                if (/^\d+$/.test(value)) { 
+                    return value;
+                }
+            }
+        }
+        return values[0] || '';
+    }
+
+    async function getCartToken() {
+        let cartValue = await getCookie('cart');
+        if (cartValue) {
+            let parts = decodeURIComponent(cartValue).split('?');
+            return parts[0];
+        } else {
+            return null;
+        }
+    }
+
+    async function sendInternalEvent(eventName) {
+        const cartToken = await getCartToken();
+        const url_params = new URLSearchParams(window.location.search);
+
+        const localeStr = navigator.language.replace('-', '_')
+        var newUrl;
+
+        let shopifyDomain = window?.shopify?.init?.data?.shop?.myshopifyDomain || '';
+        let shopifyId = shopifyDomain.split('.myshopify.com')[0];
+        var currentDomain = window.location.hostname;
+
+        var old_id = null;
+        var debug = 'initiate checkout nativo';
+
+        const eventData = {
+            id: uniqueId,
+            referrer: document.referrer,
+            path: window.location.pathname,
+            utm_source: getUTMParameter('utm_source', url_params),
+            utm_medium: getUTMParameter('utm_medium', url_params),
+            utm_campaign: getUTMParameter('utm_campaign', url_params),
+            utm_term: getUTMParameter('utm_term', url_params),
+            utm_content: getUTMParameter('utm_content', url_params),
+            sol_source: getUTMParameter('sol_source', url_params),
+            sol_medium: getUTMParameter('sol_medium', url_params),
+            sol_campaign: getUTMParameter('sol_campaign', url_params),
+            sol_content: getUTMParameter('sol_content', url_params),
+            fbc: await getCookie("_fbc") || await getCookie("fbc") || fbc || "",
+            fbp: await getCookie("_fbp") || await getCookie("fbp") || fbp || "",
+            ga_id: await getCookie('_ga') || "",
+            fbclid: url_params.get("fbclid") || await getCookie("fbclid") || "",
+            locale: localeStr.charAt(0).toUpperCase() + localeStr.slice(1),
+            timezone: /.*\s(.+)/.exec((new Date()).toLocaleDateString(navigator.language, { timeZoneName: 'short' }))[1],
+            osVersion: navigator.appVersion.split(" ")[0],
+            screenWidth: screen.width,
+            screenHeight: screen.height,
+            density: window.devicePixelRatio,
+            cpuCores: navigator.hardwareConcurrency,
+            queryParams: window.location.search,
+            debug: debug,
+            old_id: old_id,
+            utmsTrack: await getCookie('utmsTrack'),
+            shopify_id: shopifyId,
+            current_domain: currentDomain,
+            cart_token: cartToken
+        };
+
+        fetch('https://pixel-events-se6wof3usq-ue.a.run.app/event', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(eventData),
+            keepalive: true
+        })
+            .then(response => response.json())
+            .then(data => console.log('Evento enviado com sucesso:', data))
+            .catch((error) => {
+                console.error('Erro ao enviar evento:', error);
+            });
+    }
+
+    async function sendEventToServer(eventName, data) {
+        console.log("EventName:", eventName);
+        console.log("data:", data);
+        // Wait for IP addresses to be fetched
+        let customData = {};
+        let eventId = generateEventId(eventName);
+
+        if (eventName !== 'PageView') {
+            customData = {
+                content_ids: data.items.map(item => item.item_id),
+                content_name: data.items[0].item_name,
+                content_type: 'product_group',
+                value: data?.total_price ? data.total_price : data.items[0].price,
+                currency: data?.currency ? data.currency : data.items[0].currency,
+                content_category: data.items[0].item_category,
+                num_items: (eventName === 'InitiateCheckout' || eventName === 'AddPaymentInfo' || eventName === 'Purchase') ? data.items.reduce((total, item) => total + item.item_quantity, 0) : 0,
+                contents: data.items.map(item => ({ id: item.item_id, quantity: item.item_quantity })),
+            };
+        } else {
+            eventId = pageviewId;
+        }
+
+        if (eventName == 'Purchase') {
+            customData.order_id = data.order_id;
+            eventId = 'Purchase_' + data.order_id;
+        }
+
+        await ipPromise;
+        const clientIpAddress = ipv6 || ipv4;
+
+
+        let hashedUser = await hashUserData(SolomonUser);
+
+        // Prepare userData for fbq('set', 'userData', userData)
+        // const fbqUserData = {
+        //     em: hashedUser.em,
+        //     ph: hashedUser.ph,
+        //     fn: hashedUser.fn,
+        //     ln: hashedUser.ln,
+        //     ct: hashedUser.ct,
+        //     st: hashedUser.st,
+        //     zp: hashedUser.zp,
+        //     country: hashedUser.country,
+        //     external_id: uniqueId,
+        // };
+        // if (window.fbq) {
+        //     window.fbq('set', 'userData', fbqUserData);
+        // }
+
+        const eventData = {
+            event_name: eventName,
+            event_time: getEventTimestamp(),
+            user_data: {
+                em: hashedUser.em,
+                ph: hashedUser.ph,
+                fn: hashedUser.fn,
+                ln: hashedUser.ln,
+                ct: hashedUser.ct,
+                st: hashedUser.st,
+                zp: hashedUser.zp,
+                country: hashedUser.country,
+                external_id: uniqueId,
+                client_ip_address: clientIpAddress,
+                client_user_agent: navigator.userAgent,
+                fbc: await getCookie("_fbc") || fbc,
+                fbp: await getCookie("_fbp") || fbp || await getCookie("fbp"),
+            },
+            custom_data: customData,
+            event_source_url: data.url,
+            event_id: eventId,
+            action_source: 'website',
+            referrer_url: data.referrer,
+            company_id: company_id,
+            test: is_test
+        }
+
+        if (!!data.cart) {
+            console.log("data.cart", data.cart)
+        }
+
+        // Send data to your server
+        fetch('https://pixel-events-fqxpwg3smq-ue.a.run.app/event', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(eventData)
+        });
+
+        // Send equivalent event to Facebook Pixel
+        if (window.fbq) {
+            pixelIdList.forEach(pixelId => {
+                switch (eventName) {
+                    case 'PageView':
+                        break;
+                    case 'ViewContent':
+                        fbq('trackSingle', pixelId, eventName, {
+                            content_ids: data.items.map(item => item.item_id),
+                            content_name: data.items[0].item_name,
+                            content_type: 'product_group',
+                            value: data.items[0].price,
+                            currency: data.items[0].currency,
+                            content_category: data.items[0].item_category,
+                            contents: data.items.map(item => ({ id: item.item_id, quantity: item.item_quantity })),
+                        },
+                            {
+                                eventID: eventId
+                            });
+                        //content_ids, content_category, content_name, content_type, contents, currency e value
+                        break;
+                    case 'AddToCart':
+                        fbq('trackSingle', pixelId, eventName, {
+                            content_ids: data.items.map(item => item.item_id),
+                            content_name: data.items[0].item_name,
+                            content_type: 'product_group',
+                            value: data.items[0].price,
+                            currency: data.items[0].currency,
+                            contents: data.items.map(item => ({ id: item.item_id, quantity: item.item_quantity })),
+                        },
+                            {
+                                eventID: eventId
+                            });
+                        // content_ids, content_name, content_type, contents, currency e value
+                        break;
+                    case 'InitiateCheckout':
+                    case 'AddPaymentInfo':
+                        fbq('trackSingle', pixelId, eventName, {
+                            content_ids: data.items.map(item => item.item_id),
+                            content_name: data.items[0].item_name,
+                            content_type: 'product_group',
+                            value: data.total_price,
+                            currency: data.currency,
+                            content_category: data.items[0].item_category,
+                            num_items: data.items.reduce((total, item) => total + item.item_quantity, 0),
+                            contents: data.items.map(item => ({ id: item.item_id, quantity: item.item_quantity })),
+                        },
+                            {
+                                eventID: eventId
+                            });
+                        //content_category, content_ids, contents, currency, num_items e value
+                        break;
+                    case 'Purchase':
+                        fbq('trackSingle', pixelId, eventName, {
+                            content_ids: data.items.map(item => item.item_id),
+                            content_name: data.items[0].item_name,
+                            content_type: 'product_group',
+                            value: data.total_price,
+                            currency: data.currency,
+                            content_category: data.items[0].item_category,
+                            num_items: data.items.reduce((total, item) => total + item.item_quantity, 0),
+                            contents: data.items.map(item => ({ id: item.item_id, quantity: item.item_quantity })),
+                            order_id: data.order_id,
+                        },
+                            {
+                                eventID: eventId
+                            });
+                        //content_category, content_ids, contents, currency, num_items e value
+                        break;
+                }
+            });
+        }
+    }
+})();

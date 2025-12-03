@@ -1,0 +1,294 @@
+(function () {
+    function sendEvent(cartToken) {
+        function isBot(userAgent) {
+            var bots = [
+                'googlebot', 'bingbot', 'slurp', 'duckduckbot', 'baiduspider', 'yandexbot', 'sogou', 'exabot', 'facebookexternalhit', 'twitterbot',
+                'bytespider', 'ev-crawler', 'storebot', 'sitecheckerbotcrawler', 'ahrefsbot', 'webpagetest.org bot', 'facebookbot',
+                'claudebot', 'seekportbot'
+            ];
+            return bots.some(function (bot) { return userAgent.toLowerCase().indexOf(bot) !== -1; });
+        }
+
+        var utmTerm = new URLSearchParams(window.location.search).get('utm_term');
+        var userAgent = navigator.userAgent;
+
+
+        if (isBot(userAgent)) {
+            return;
+        }
+
+        var currentDomain = window.location.hostname;
+        var shopifyId = window.SolomonShopifyId || '';
+
+        function getUTMParameter(param, params) {
+            var values = params.getAll(param);
+            for (var i = 0; i < values.length; i++) {
+                if (/^\d+$/.test(values[i])) {
+                    return values[i];
+                }
+            }
+            return values[0] || '';
+        }
+
+        function getCookie(name) {
+            var cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                var cookies = document.cookie.split(';');
+                for (var i = 0; i < cookies.length; i++) {
+                    var cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        function getParamFallback(param) {
+            var urlParams = new URLSearchParams(window.location.search);
+            var valUrl = getUTMParameter(param, urlParams);
+            if (valUrl) return valUrl;
+            return '';
+        }
+
+        function getRootDomain() {
+            var hostname = window.location.hostname;
+            var parts = hostname.split('.');
+
+            // Debug: log para verificar o processamento
+            // console.log('Hostname:', hostname, 'Parts:', parts);
+
+            // Se tem apenas 2 partes (ex: site.com), retorna com ponto
+            if (parts.length === 2) {
+                return '.' + hostname;
+            }
+
+            // Se tem 3 partes exatamente
+            if (parts.length === 3) {
+                var secondLastPart = parts[parts.length - 2];
+                var compositeTLDs = ['com', 'net', 'org', 'gov', 'edu', 'mil', 'co', 'ac', 'ad'];
+
+                // Se é TLD composto, usa todas as 3 partes (.site.com.br)
+                if (compositeTLDs.indexOf(secondLastPart) !== -1) {
+                    return '.' + parts.join('.');
+                }
+                // Se não é TLD composto, usa apenas as últimas 2 (.site.shop)
+                else {
+                    return '.' + parts.slice(-2).join('.');
+                }
+            }
+
+            // Se tem 4 ou mais partes (ex: www.site.com.br, pagamento.site.com.br)
+            if (parts.length >= 4) {
+                var secondLastPart = parts[parts.length - 2];
+                var compositeTLDs = ['com', 'net', 'org', 'gov', 'edu', 'mil', 'co', 'ac', 'ad'];
+
+                // Se é TLD composto, usa as últimas 3 partes (.site.com.br)
+                if (compositeTLDs.indexOf(secondLastPart) !== -1) {
+                    return '.' + parts.slice(-3).join('.');
+                }
+                // Se não é TLD composto, usa as últimas 2 partes (.site.shop)
+                else {
+                    return '.' + parts.slice(-2).join('.');
+                }
+            }
+
+            // Fallback para hostname único
+            return hostname;
+        }
+
+        function setCookie(name, value, days) {
+            var expires = "";
+            if (days) {
+                var date = new Date();
+                date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+                expires = "; expires=" + date.toUTCString();
+            }
+            var domain = getRootDomain();
+            document.cookie = name + "=" + (encodeURIComponent(value) || "") + expires + "; path=/; domain=" + domain + "; SameSite=None; Secure";
+        }
+
+        var searchParams = new URLSearchParams(window.location.search);
+
+        var localStorageKey = 'uniqueId';
+        var cookieKey = 'uniqueId';
+        var uniqueId;
+        var debug;
+        var localeStr = navigator.language.replace('-', '_');
+        var queryParams = window.location.search;
+
+        var fbp = searchParams.get('fbp') || getCookie('_fbp') || "";
+        var fbc = searchParams.get('fbc') || getCookie('_fbc') || "";
+        var fbclid = searchParams.get('fbclid') || getCookie('_fbclid') || "";
+        var gaId = getCookie('_ga') || "";
+        var old_id;
+
+        var pattern = /^[a-z0-9]{9}_([0-9]+)$/;
+
+        if (localStorage.getItem(localStorageKey)) {
+            uniqueId = localStorage.getItem(localStorageKey);
+            debug = 'sem url/ com local storage';
+        } else if (getCookie(cookieKey)) {
+            uniqueId = getCookie(cookieKey);
+            localStorage.setItem(localStorageKey, uniqueId);
+            debug = 'sem url/ sem local storage/ mas no cookie';
+        } else if (utmTerm && pattern.test(utmTerm) && document.referrer.indexOf(window.location.hostname) !== -1) {
+            uniqueId = utmTerm;
+            localStorage.setItem(localStorageKey, uniqueId);
+            debug = 'com url/ sem local storage'
+        } else {
+            uniqueId = Math.random().toString(36).substr(2, 9) + "_" + new Date().getTime();
+            localStorage.setItem(localStorageKey, uniqueId);
+            debug = 'sem url/ sem local storage';
+        }
+
+        if (uniqueId !== utmTerm) {
+            old_id = utmTerm;
+        }
+
+        setCookie(cookieKey, uniqueId, 365);
+
+        var utms = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'sol_source', 'sol_medium', 'sol_campaign', 'sol_content'];
+        var shouldUpdateUrl = false;
+        var currentUrlParams = new URLSearchParams(window.location.search);
+        var storedUtms = {};
+
+        utms.forEach(function (utm) {
+            var valueFromUrl = getUTMParameter(utm, currentUrlParams);
+            var valueFromStorage = localStorage.getItem(utm);
+
+            if (valueFromUrl) {
+                localStorage.setItem(utm, valueFromUrl);
+                storedUtms[utm] = valueFromUrl;
+            } else if (valueFromStorage) {
+                storedUtms[utm] = valueFromStorage;
+                shouldUpdateUrl = true;
+            }
+        });
+
+        if (shouldUpdateUrl) {
+            var newUrl = new URL(window.location);
+            for (var utm in storedUtms) {
+                if (storedUtms.hasOwnProperty(utm) && utms.includes(utm)) {
+                    newUrl.searchParams.set(utm, storedUtms[utm]);
+                }
+            }
+            // window.history.replaceState({}, '', newUrl.toString());
+        }
+
+        var cartTokenFinal = cartToken;
+        if (cartToken && (localStorage.getItem('cartToken') !== cartToken)) {
+            localStorage.setItem('cartToken', cartToken);
+        }
+        if (!cartToken && localStorage.getItem('cartToken')) {
+            cartTokenFinal = localStorage.getItem('cartToken');
+        }
+
+        var url_params = new URLSearchParams(window.location.search);
+
+        var eventData = {
+            id: uniqueId,
+            referrer: document.referrer,
+            path: window.location.pathname,
+            utm_source: getParamFallback('utm_source'),
+            utm_medium: getParamFallback('utm_medium'),
+            utm_campaign: getParamFallback('utm_campaign'),
+            utm_term: uniqueId,
+            utm_content: getParamFallback('utm_content'),
+            sol_source: getParamFallback('sol_source'),
+            sol_medium: getParamFallback('sol_medium'),
+            sol_campaign: getParamFallback('sol_campaign'),
+            sol_content: getParamFallback('sol_content'),
+            fbp: fbp,
+            fbc: fbc,
+            ga_id: gaId,
+            fbclid: fbclid,
+            locale: localeStr.charAt(0).toUpperCase() + localeStr.slice(1),
+            timezone: /.*\s(.+)/.exec((new Date()).toLocaleDateString(navigator.language, { timeZoneName: 'short' }))[1] || 'BRT',
+            osVersion: navigator.appVersion.split(" ")[0],
+            screenWidth: screen.width,
+            screenHeight: screen.height,
+            density: window.devicePixelRatio,
+            cpuCores: navigator.hardwareConcurrency,
+            queryParams: queryParams,
+            debug: debug,
+            old_id: old_id,
+            utmsTrack: getCookie('utmsTrack'),
+            shopify_id: shopifyId,
+            current_domain: currentDomain,
+            cart_token: cartTokenFinal,
+            email: (window.checkout && window.checkout.cart && window.checkout.cart.customer ? window.checkout.cart.customer.email : undefined)
+        };
+
+        fetch('https://pixel-events-se6wof3usq-ue.a.run.app/event', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(eventData),
+        })
+            .then(function (response) { return response.json(); })
+            .then(function (data) { console.log('Evento enviado com sucesso:', data); })
+            .catch(function (error) { console.error('Erro ao enviar evento:', error); });
+
+        function updateUTMParametersInCookie() {
+            var existingParams = {};
+            var existingCookie = getCookie('utmsTrack');
+            if (existingCookie) {
+                existingCookie.split('&').forEach(function (part) {
+                    var item = part.split('=');
+                    existingParams[item[0]] = item[1];
+                });
+            }
+            var cookieParams = storedUtms;
+            cookieParams['utm_term'] = uniqueId;
+            var updatedParams = {};
+            for (var key in existingParams) {
+                if (existingParams.hasOwnProperty(key)) {
+                    updatedParams[key] = existingParams[key];
+                }
+            }
+            for (var key in cookieParams) {
+                if (cookieParams.hasOwnProperty(key)) {
+                    updatedParams[key] = cookieParams[key];
+                }
+            }
+            var updatedString = [];
+            for (var key in updatedParams) {
+                if (updatedParams.hasOwnProperty(key)) {
+                    updatedString.push(key + '=' + updatedParams[key]);
+                }
+            }
+            setCookie('utmsTrack', updatedString.join('&'), 30);
+        }
+
+        updateUTMParametersInCookie();
+    }
+
+    function getCookie(name) {
+        var cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            var cookies = document.cookie.split(';');
+            for (var i = 0; i < cookies.length; i++) {
+                var cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    function getCartToken() {
+        var window_cart_token = window.transaction && window.transaction.id;
+
+        if (window_cart_token) {
+            return window_cart_token;
+        }
+        return null;
+    }
+
+    sendEvent(getCartToken());
+})();
