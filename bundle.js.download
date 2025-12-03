@@ -1,0 +1,9 @@
+(()=>{
+            if (document.querySelector(`script[src='https://cdn.ishorts.com.br/shopify/bundle.js?v=2']`)) return;
+
+            window.IS_DATA = {"widget":{"others":{"primary":"#ba584b","secondary":"#ffffff","x":1.2203690581598758,"y":64.02903265961774,"model":"circular","size":0.75,"random":false,"x_mobile":0,"y_mobile":77.82008341277442},"product":{"primary":"#ba584b","secondary":"#ffffff","x":"10","y":"25","model":"circular","size":0.75,"random":false},"destiny":"product"},"feed":{"show":false,"page":"all","text":null,"pages":[]},"video":{"like_count":false,"comment_count":false,"comment_approve":false,"feedback":false,"whatsapp":{"show":false,"number":null,"message":"Ol\u00e1, tenho algumas d\u00favidas, poderia me ajudar?","count":false},"share_count":false,"measure_count":false},"store":{"logo":null,"name":"P\u00e9 de Algod\u00e3o","primary":"#ba584b","secondary":"#ffffff"},"carousel":{"where":"#shopify-section-template--19717923766490__image_with_text_TfnDwa"}};
+            const script = document.createElement('script');
+            script.src = 'https://cdn.ishorts.com.br/shopify/bundle.js?v=2';
+            script.async = true;
+            document.body.appendChild(script);
+        })();
